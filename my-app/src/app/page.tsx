@@ -41,6 +41,8 @@ export default function ControlPage() {
   const channelRef = useRef<RealtimeChannel | null>(null);
   const isInitializedRef = useRef(false);
   const lastBroadcastTime = useRef(0);
+  const lastReceivedBroadcast = useRef(0);
+  const isCountingRef = useRef(false);
 
   // Broadcast timers to all connected clients via Supabase Realtime and save to database
   const broadcastTimers = useCallback((newTimers: Timer[], saveToDb: boolean = true) => {
@@ -107,10 +109,12 @@ export default function ControlPage() {
     channel
       .on("broadcast", { event: "timer-update" }, ({ payload }) => {
         if (payload && payload.timers && payload.lastUpdate) {
+          // Track when we receive broadcasts
+          lastReceivedBroadcast.current = Date.now();
+          
           // Only apply if this is from another device (different timestamp)
           const timeDiff = Math.abs(payload.lastUpdate - lastBroadcastTime.current);
-          if (timeDiff > 100) { // More than 100ms difference = from another device
-            lastBroadcastTime.current = payload.lastUpdate;
+          if (timeDiff > 50) { // More than 50ms difference = from another device
             setTimers(payload.timers);
           }
         }
@@ -137,10 +141,22 @@ export default function ControlPage() {
     let tickCount = 0;
     const interval = setInterval(() => {
       const now = Date.now();
+      
+      // If we received a broadcast in the last 2 seconds, another device is running the countdown
+      // Don't run our own countdown to avoid conflicts
+      const timeSinceLastBroadcast = now - lastReceivedBroadcast.current;
+      if (timeSinceLastBroadcast < 2000 && lastReceivedBroadcast.current > 0) {
+        return; // Another device is handling the countdown
+      }
+      
       setTimers((prev) => {
         const hasRunning = prev.some((t) => t.state === "running");
-        if (!hasRunning) return prev;
+        if (!hasRunning) {
+          isCountingRef.current = false;
+          return prev;
+        }
 
+        isCountingRef.current = true;
         const updated = prev.map((timer) => {
           if (timer.state === "running") {
             return { ...timer, timeRemaining: timer.timeRemaining - 1 };
