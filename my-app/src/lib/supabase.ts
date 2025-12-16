@@ -39,7 +39,11 @@ export interface TimerRow {
 export async function saveTimersToDatabase(timers: Timer[]): Promise<void> {
   try {
     // Delete all existing timers
-    await supabase.from('timers').delete().neq('id', '');
+    const { error: deleteError } = await supabase.from('timers').delete().neq('id', '');
+    if (deleteError) {
+      console.error('Error deleting old timers:', deleteError);
+      return;
+    }
     
     // Insert all timers with their display order
     const rows: TimerRow[] = timers.map((timer, index) => ({
@@ -54,11 +58,14 @@ export async function saveTimersToDatabase(timers: Timer[]): Promise<void> {
     if (rows.length > 0) {
       const { error } = await supabase.from('timers').insert(rows);
       if (error) {
-        console.error('Error saving timers to database:', error);
+        console.error('❌ Error saving timers to database:', error);
+        console.error('Make sure you have run the SQL script from supabase-setup.sql');
+      } else {
+        console.log('✅ Timers saved to database:', rows.length);
       }
     }
   } catch (error) {
-    console.error('Error in saveTimersToDatabase:', error);
+    console.error('❌ Error in saveTimersToDatabase:', error);
   }
 }
 
@@ -71,14 +78,17 @@ export async function loadTimersFromDatabase(): Promise<Timer[]> {
       .order('display_order', { ascending: true });
 
     if (error) {
-      console.error('Error loading timers from database:', error);
+      console.error('❌ Error loading timers from database:', error);
+      console.error('Make sure you have run the SQL script from supabase-setup.sql');
       return [];
     }
 
     if (!data || data.length === 0) {
+      console.log('ℹ️ No timers found in database');
       return [];
     }
 
+    console.log('✅ Loaded timers from database:', data.length);
     return data.map((row: TimerRow) => ({
       id: row.id,
       name: row.name,
@@ -87,7 +97,7 @@ export async function loadTimersFromDatabase(): Promise<Timer[]> {
       state: row.state,
     }));
   } catch (error) {
-    console.error('Error in loadTimersFromDatabase:', error);
+    console.error('❌ Error in loadTimersFromDatabase:', error);
     return [];
   }
 }
