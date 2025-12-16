@@ -140,7 +140,7 @@ export default function ControlPage() {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [broadcastTimers]);
+  }, []); // Empty deps - broadcastTimers is stable
 
   const formatTime = (seconds: number): string => {
     const isNegative = seconds < 0;
