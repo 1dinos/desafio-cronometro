@@ -41,11 +41,13 @@ export default function ControlPage() {
   const isInitializedRef = useRef(false);
 
   // Broadcast timers to all connected clients via Supabase Realtime and save to database
-  const broadcastTimers = useCallback(async (newTimers: Timer[]) => {
-    // Save to database first
-    await saveTimersToDatabase(newTimers);
+  const broadcastTimers = useCallback(async (newTimers: Timer[], saveToDb: boolean = true) => {
+    // Save to database only when explicitly requested (for state changes)
+    if (saveToDb) {
+      await saveTimersToDatabase(newTimers);
+    }
     
-    // Then broadcast to real-time channel
+    // Always broadcast to real-time channel (fast)
     if (channelRef.current) {
       const payload: TimerPayload = {
         timers: newTimers,
@@ -134,6 +136,7 @@ export default function ControlPage() {
 
   // Timer logic - countdown running timers
   useEffect(() => {
+    let tickCount = 0;
     const interval = setInterval(() => {
       setTimers((prev) => {
         const hasRunning = prev.some((t) => t.state === "running");
@@ -146,8 +149,11 @@ export default function ControlPage() {
           return timer;
         });
 
-        // Broadcast updated timers
-        broadcastTimers(updated);
+        tickCount++;
+        // Only save to database every 5 seconds to reduce lag
+        // Broadcast every second for smooth updates
+        const saveToDb = tickCount % 5 === 0;
+        broadcastTimers(updated, saveToDb);
         return updated;
       });
     }, 1000);
