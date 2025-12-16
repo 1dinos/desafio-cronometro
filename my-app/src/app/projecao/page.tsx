@@ -1,16 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
-
-type TimerState = "stopped" | "running" | "paused";
-
-interface Timer {
-  id: string;
-  name: string;
-  timeRemaining: number;
-  totalTime: number;
-  state: TimerState;
-}
+import { useState, useEffect, useRef } from "react";
+import { supabase, TIMER_CHANNEL, Timer, TimerPayload, loadTimersFromDatabase } from "@/lib/supabase";
+import { RealtimeChannel } from "@supabase/supabase-js";
 
 const COLORS = [
   "from-blue-600 to-blue-800",
@@ -21,38 +13,85 @@ const COLORS = [
 
 export default function ProjectionPage() {
   const [timers, setTimers] = useState<Timer[]>([]);
+  const [isConnected, setIsConnected] = useState(false);
+  const channelRef = useRef<RealtimeChannel | null>(null);
 
-  // Load timers from localStorage and listen for updates
+  // Setup Supabase Realtime channel and load from database
   useEffect(() => {
-    const loadTimers = () => {
-      const stored = localStorage.getItem("timers");
-      if (stored) {
-        try {
-          setTimers(JSON.parse(stored));
-        } catch (e) {
-          console.error("Error parsing timers:", e);
+    // Load initial state from database
+    const loadFromDatabase = async () => {
+      const dbTimers = await loadTimersFromDatabase();
+      if (dbTimers.length > 0) {
+        setTimers(dbTimers);
+      } else {
+        // Fallback to localStorage if database is empty
+        const stored = localStorage.getItem("timers");
+        if (stored) {
+          try {
+            setTimers(JSON.parse(stored));
+          } catch (e) {
+            console.error("Error parsing timers:", e);
+          }
         }
       }
     };
+    loadFromDatabase();
 
-    // Initial load
-    loadTimers();
+    // Subscribe to broadcast updates (fast, real-time)
+    const channel = supabase.channel(TIMER_CHANNEL, {
+      config: {
+        broadcast: { self: true },
+      },
+    });
 
-    // Listen for storage changes
+    channel
+      .on("broadcast", { event: "timer-update" }, ({ payload }) => {
+        if (payload && payload.timers) {
+          setTimers(payload.timers);
+        }
+      })
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") {
+          setIsConnected(true);
+        } else {
+          setIsConnected(false);
+        }
+      });
+
+    channelRef.current = channel;
+
+    // Also subscribe to database changes (for reliability)
+    const dbChannel = supabase
+      .channel('db-timers-changes-projection')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'timers',
+        },
+        async () => {
+          // Reload from database when changes occur
+          const dbTimers = await loadTimersFromDatabase();
+          if (dbTimers.length > 0) {
+            setTimers(dbTimers);
+          }
+        }
+      )
+      .subscribe();
+
+    // Fallback: Listen for localStorage changes (same device)
     const handleStorageChange = () => {
-      loadTimers();
+      loadFromDatabase();
     };
-
     window.addEventListener("storage", handleStorageChange);
-    window.addEventListener("timers-updated", loadTimers);
-
-    // Poll for updates (fallback)
-    const interval = setInterval(loadTimers, 100);
+    window.addEventListener("timers-updated", loadFromDatabase);
 
     return () => {
+      channel.unsubscribe();
+      dbChannel.unsubscribe();
       window.removeEventListener("storage", handleStorageChange);
-      window.removeEventListener("timers-updated", loadTimers);
-      clearInterval(interval);
+      window.removeEventListener("timers-updated", loadFromDatabase);
     };
   }, []);
 
@@ -77,6 +116,14 @@ export default function ProjectionPage() {
         <div className="text-center">
           <div className="text-6xl mb-4">⏱️</div>
           <p className="text-xl text-zinc-400">Aguardando cronómetros...</p>
+          <div className={`mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm ${
+            isConnected 
+              ? "bg-green-500/20 text-green-400" 
+              : "bg-yellow-500/20 text-yellow-400"
+          }`}>
+            <span className={`w-2 h-2 rounded-full ${isConnected ? "bg-green-400 animate-pulse" : "bg-yellow-400"}`}></span>
+            {isConnected ? "Conectado" : "A conectar..."}
+          </div>
         </div>
       </div>
     );
@@ -84,6 +131,16 @@ export default function ProjectionPage() {
 
   return (
     <div className="min-h-screen bg-black text-white flex items-center justify-center p-8">
+      {/* Connection indicator */}
+      <div className={`fixed top-4 right-4 flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium ${
+        isConnected 
+          ? "bg-green-500/20 text-green-400 border border-green-500/30" 
+          : "bg-yellow-500/20 text-yellow-400 border border-yellow-500/30"
+      }`}>
+        <span className={`w-2 h-2 rounded-full ${isConnected ? "bg-green-400 animate-pulse" : "bg-yellow-400"}`}></span>
+        {isConnected ? "Sincronizado" : "A conectar..."}
+      </div>
+      
       <div className="w-full">
         {/* Timers Display - Full Screen Optimized */}
         <div

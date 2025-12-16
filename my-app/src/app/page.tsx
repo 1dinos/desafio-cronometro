@@ -1,17 +1,9 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
-
-type TimerState = "stopped" | "running" | "paused";
-
-interface Timer {
-  id: string;
-  name: string;
-  timeRemaining: number;
-  totalTime: number;
-  state: TimerState;
-}
+import { supabase, TIMER_CHANNEL, Timer, TimerState, TimerPayload, saveTimersToDatabase, loadTimersFromDatabase } from "@/lib/supabase";
+import { RealtimeChannel } from "@supabase/supabase-js";
 
 const DEFAULT_TIME = 5 * 60;
 
@@ -44,28 +36,124 @@ export default function ControlPage() {
 
   const [customMinutes, setCustomMinutes] = useState(5);
   const [customSeconds, setCustomSeconds] = useState(0);
+  const [isConnected, setIsConnected] = useState(false);
+  const channelRef = useRef<RealtimeChannel | null>(null);
+  const isInitializedRef = useRef(false);
 
-  // Save timers to localStorage for projection page sync
-  useEffect(() => {
-    localStorage.setItem("timers", JSON.stringify(timers));
+  // Broadcast timers to all connected clients via Supabase Realtime and save to database
+  const broadcastTimers = useCallback(async (newTimers: Timer[]) => {
+    // Save to database first
+    await saveTimersToDatabase(newTimers);
+    
+    // Then broadcast to real-time channel
+    if (channelRef.current) {
+      const payload: TimerPayload = {
+        timers: newTimers,
+        lastUpdate: Date.now(),
+      };
+      channelRef.current.send({
+        type: "broadcast",
+        event: "timer-update",
+        payload,
+      });
+    }
+    
+    // Also save to localStorage as fallback
+    localStorage.setItem("timers", JSON.stringify(newTimers));
     window.dispatchEvent(new Event("timers-updated"));
-  }, [timers]);
+  }, []);
 
-  // Timer logic
+  // Load timers from database on mount
+  useEffect(() => {
+    const loadInitialData = async () => {
+      const dbTimers = await loadTimersFromDatabase();
+      if (dbTimers.length > 0) {
+        setTimers(dbTimers);
+      }
+    };
+    loadInitialData();
+  }, []);
+
+  // Setup Supabase Realtime channel for broadcasts and database changes
+  useEffect(() => {
+    const channel = supabase.channel(TIMER_CHANNEL, {
+      config: {
+        broadcast: { self: true },
+      },
+    });
+
+    // Listen for broadcast updates
+    channel
+      .on("broadcast", { event: "timer-update" }, ({ payload }) => {
+        if (payload && payload.timers) {
+          setTimers(payload.timers);
+        }
+      })
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") {
+          setIsConnected(true);
+          // Save initial state once connected
+          if (!isInitializedRef.current) {
+            isInitializedRef.current = true;
+            setTimeout(() => {
+              broadcastTimers(timers);
+            }, 100);
+          }
+        } else {
+          setIsConnected(false);
+        }
+      });
+
+    channelRef.current = channel;
+
+    // Also subscribe to database changes
+    const dbChannel = supabase
+      .channel('db-timers-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'timers',
+        },
+        async () => {
+          // Reload from database when changes occur
+          const dbTimers = await loadTimersFromDatabase();
+          if (dbTimers.length > 0) {
+            setTimers(dbTimers);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      channel.unsubscribe();
+      dbChannel.unsubscribe();
+    };
+  }, []);
+
+  // Timer logic - countdown running timers
   useEffect(() => {
     const interval = setInterval(() => {
-      setTimers((prev) =>
-        prev.map((timer) => {
+      setTimers((prev) => {
+        const hasRunning = prev.some((t) => t.state === "running");
+        if (!hasRunning) return prev;
+
+        const updated = prev.map((timer) => {
           if (timer.state === "running") {
             return { ...timer, timeRemaining: timer.timeRemaining - 1 };
           }
           return timer;
-        })
-      );
+        });
+
+        // Broadcast updated timers
+        broadcastTimers(updated);
+        return updated;
+      });
     }, 1000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [broadcastTimers]);
 
   const formatTime = (seconds: number): string => {
     const isNegative = seconds < 0;
@@ -94,73 +182,85 @@ export default function ControlPage() {
   };
 
   const startTimer = useCallback((timerId: string) => {
-    setTimers((prev) =>
-      prev.map((t) => {
+    setTimers((prev) => {
+      const updated = prev.map((t) => {
         if (t.id === timerId && t.timeRemaining > 0) {
           return { ...t, state: "running" as TimerState };
         }
         return t;
-      })
-    );
-  }, []);
+      });
+      broadcastTimers(updated);
+      return updated;
+    });
+  }, [broadcastTimers]);
 
   const pauseTimer = useCallback((timerId: string) => {
-    setTimers((prev) =>
-      prev.map((t) => {
+    setTimers((prev) => {
+      const updated = prev.map((t) => {
         if (t.id === timerId) {
           return { ...t, state: "paused" as TimerState };
         }
         return t;
-      })
-    );
-  }, []);
+      });
+      broadcastTimers(updated);
+      return updated;
+    });
+  }, [broadcastTimers]);
 
   const resetTimer = useCallback((timerId: string) => {
-    setTimers((prev) =>
-      prev.map((t) => {
+    setTimers((prev) => {
+      const updated = prev.map((t) => {
         if (t.id === timerId) {
           return { ...t, timeRemaining: t.totalTime, state: "stopped" as TimerState };
         }
         return t;
-      })
-    );
-  }, []);
+      });
+      broadcastTimers(updated);
+      return updated;
+    });
+  }, [broadcastTimers]);
 
   const resetAll = useCallback(() => {
-    setTimers((prev) =>
-      prev.map((t) => ({
+    setTimers((prev) => {
+      const updated = prev.map((t) => ({
         ...t,
         timeRemaining: t.totalTime,
         state: "stopped" as TimerState,
-      }))
-    );
-  }, []);
+      }));
+      broadcastTimers(updated);
+      return updated;
+    });
+  }, [broadcastTimers]);
 
   const pauseAll = useCallback(() => {
-    setTimers((prev) =>
-      prev.map((t) => ({
+    setTimers((prev) => {
+      const updated = prev.map((t) => ({
         ...t,
         state: t.state === "running" ? ("paused" as TimerState) : t.state,
-      }))
-    );
-  }, []);
+      }));
+      broadcastTimers(updated);
+      return updated;
+    });
+  }, [broadcastTimers]);
 
   const updateTimerName = useCallback((timerId: string, name: string) => {
-    setTimers((prev) =>
-      prev.map((t) => {
+    setTimers((prev) => {
+      const updated = prev.map((t) => {
         if (t.id === timerId) {
           return { ...t, name };
         }
         return t;
-      })
-    );
-  }, []);
+      });
+      broadcastTimers(updated);
+      return updated;
+    });
+  }, [broadcastTimers]);
 
   const updateTimerTime = useCallback(
     (timerId: string, minutes: number, seconds: number) => {
       const totalSeconds = minutes * 60 + seconds;
-      setTimers((prev) =>
-        prev.map((t) => {
+      setTimers((prev) => {
+        const updated = prev.map((t) => {
           if (t.id === timerId) {
             return {
               ...t,
@@ -170,10 +270,12 @@ export default function ControlPage() {
             };
           }
           return t;
-        })
-      );
+        });
+        broadcastTimers(updated);
+        return updated;
+      });
     },
-    []
+    [broadcastTimers]
   );
 
   const addTimer = useCallback(() => {
@@ -185,13 +287,21 @@ export default function ControlPage() {
       totalTime: totalSeconds,
       state: "stopped",
     };
-    setTimers((prev) => [...prev, newTimer]);
-  }, [customMinutes, customSeconds, timers.length]);
+    setTimers((prev) => {
+      const updated = [...prev, newTimer];
+      broadcastTimers(updated);
+      return updated;
+    });
+  }, [customMinutes, customSeconds, timers.length, broadcastTimers]);
 
   const removeTimer = useCallback((timerId: string) => {
     if (timers.length <= 1) return;
-    setTimers((prev) => prev.filter((t) => t.id !== timerId));
-  }, [timers.length]);
+    setTimers((prev) => {
+      const updated = prev.filter((t) => t.id !== timerId);
+      broadcastTimers(updated);
+      return updated;
+    });
+  }, [timers.length, broadcastTimers]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
