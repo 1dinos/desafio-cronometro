@@ -17,22 +17,7 @@ const COLORS = [
 ];
 
 export default function ControlPage() {
-  const [timers, setTimers] = useState<Timer[]>([
-    {
-      id: generateId(),
-      name: "Orador 1",
-      timeRemaining: DEFAULT_TIME,
-      totalTime: DEFAULT_TIME,
-      state: "stopped",
-    },
-    {
-      id: generateId(),
-      name: "Orador 2",
-      timeRemaining: DEFAULT_TIME,
-      totalTime: DEFAULT_TIME,
-      state: "stopped",
-    },
-  ]);
+  const [timers, setTimers] = useState<Timer[]>([]);
 
   const [customMinutes, setCustomMinutes] = useState(5);
   const [customSeconds, setCustomSeconds] = useState(0);
@@ -74,6 +59,27 @@ export default function ControlPage() {
       const dbTimers = await loadTimersFromDatabase();
       if (dbTimers.length > 0) {
         setTimers(dbTimers);
+      } else {
+        // If no timers in database, create default ones
+        const defaultTimers: Timer[] = [
+          {
+            id: generateId(),
+            name: "Orador 1",
+            timeRemaining: DEFAULT_TIME,
+            totalTime: DEFAULT_TIME,
+            state: "stopped",
+          },
+          {
+            id: generateId(),
+            name: "Orador 2",
+            timeRemaining: DEFAULT_TIME,
+            totalTime: DEFAULT_TIME,
+            state: "stopped",
+          },
+        ];
+        setTimers(defaultTimers);
+        // Save default timers to database
+        await saveTimersToDatabase(defaultTimers);
       }
     };
     loadInitialData();
