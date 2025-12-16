@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
-import { supabase, TIMER_CHANNEL, Timer, TimerState, TimerPayload, saveTimersToDatabase, loadTimersFromDatabase } from "@/lib/supabase";
+import { supabase, TIMER_CHANNEL, Timer, TimerState, TimerPayload, saveTimersToDatabase, loadTimersFromDatabase, testDatabaseConnection } from "@/lib/supabase";
 import { RealtimeChannel } from "@supabase/supabase-js";
 
 const DEFAULT_TIME = 5 * 60;
@@ -72,6 +72,9 @@ export default function ControlPage() {
   // Load timers from database on mount
   useEffect(() => {
     const loadInitialData = async () => {
+      // Test database connection first
+      await testDatabaseConnection();
+      
       console.log('🔄 Loading timers from database...');
       const dbTimers = await loadTimersFromDatabase();
       console.log('📊 Database returned:', dbTimers.length, 'timers');

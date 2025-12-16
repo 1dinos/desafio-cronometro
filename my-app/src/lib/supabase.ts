@@ -69,6 +69,31 @@ export async function saveTimersToDatabase(timers: Timer[]): Promise<void> {
   }
 }
 
+// Test database connection
+export async function testDatabaseConnection(): Promise<boolean> {
+  try {
+    console.log('🔍 Testing database connection...');
+    console.log('Supabase URL:', supabaseUrl);
+    console.log('Anon key exists:', !!supabaseAnonKey);
+    
+    const { data, error, count } = await supabase
+      .from('timers')
+      .select('*', { count: 'exact', head: true });
+
+    if (error) {
+      console.error('❌ Database test failed:', error.message);
+      console.error('Error details:', error);
+      return false;
+    }
+
+    console.log('✅ Database connected! Table exists with', count, 'rows');
+    return true;
+  } catch (error) {
+    console.error('❌ Database connection error:', error);
+    return false;
+  }
+}
+
 // Load all timers from database
 export async function loadTimersFromDatabase(): Promise<Timer[]> {
   try {
@@ -79,7 +104,8 @@ export async function loadTimersFromDatabase(): Promise<Timer[]> {
 
     if (error) {
       console.error('❌ Error loading timers from database:', error);
-      console.error('Make sure you have run the SQL script from supabase-setup.sql');
+      console.error('Error message:', error.message);
+      console.error('Error code:', error.code);
       return [];
     }
 
