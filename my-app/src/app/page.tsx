@@ -117,13 +117,8 @@ export default function ControlPage() {
       .subscribe((status) => {
         if (status === "SUBSCRIBED") {
           setIsConnected(true);
-          // Save initial state once connected
-          if (!isInitializedRef.current) {
-            isInitializedRef.current = true;
-            setTimeout(() => {
-              broadcastTimers(timers);
-            }, 100);
-          }
+          // Don't broadcast on initial connection - just listen
+          // Database load will handle the initial state
         } else {
           setIsConnected(false);
         }
