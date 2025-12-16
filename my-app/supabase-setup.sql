@@ -1,5 +1,8 @@
+-- Drop existing table and recreate from scratch
+DROP TABLE IF EXISTS timers CASCADE;
+
 -- Create timers table for persistent storage
-CREATE TABLE IF NOT EXISTS timers (
+CREATE TABLE timers (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   time_remaining INTEGER NOT NULL,
@@ -10,7 +13,7 @@ CREATE TABLE IF NOT EXISTS timers (
 );
 
 -- Create index for faster queries
-CREATE INDEX IF NOT EXISTS idx_timers_updated_at ON timers(updated_at);
+CREATE INDEX idx_timers_updated_at ON timers(updated_at);
 
 -- Enable Row Level Security
 ALTER TABLE timers ENABLE ROW LEVEL SECURITY;
