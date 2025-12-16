@@ -107,8 +107,9 @@ export default function ControlPage() {
     channel
       .on("broadcast", { event: "timer-update" }, ({ payload }) => {
         if (payload && payload.timers && payload.lastUpdate) {
-          // Only apply if this is a newer update (prevents processing own broadcasts)
-          if (payload.lastUpdate > lastBroadcastTime.current) {
+          // Only apply if this is from another device (different timestamp)
+          const timeDiff = Math.abs(payload.lastUpdate - lastBroadcastTime.current);
+          if (timeDiff > 100) { // More than 100ms difference = from another device
             lastBroadcastTime.current = payload.lastUpdate;
             setTimers(payload.timers);
           }
@@ -509,7 +510,7 @@ export default function ControlPage() {
                     <button
                       onClick={() => startTimer(timer.id)}
                       disabled={timer.timeRemaining === 0}
-                      className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 disabled:from-gray-700 disabled:to-gray-700 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-all"
+                      className="flex-1 flex items-center justify-center gap-1.5 px-3 py-3 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 active:scale-95 disabled:from-gray-700 disabled:to-gray-700 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-all touch-manipulation"
                     >
                       <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                         <path d="M6.3 2.841A1.5 1.5 0 004 4.11v11.78a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z" />
@@ -519,7 +520,7 @@ export default function ControlPage() {
                   ) : (
                     <button
                       onClick={() => pauseTimer(timer.id)}
-                      className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 bg-yellow-600 hover:bg-yellow-500 text-white text-sm font-medium rounded-lg transition-all"
+                      className="flex-1 flex items-center justify-center gap-1.5 px-3 py-3 bg-yellow-600 hover:bg-yellow-500 active:scale-95 text-white text-sm font-medium rounded-lg transition-all touch-manipulation"
                     >
                       <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                         <path d="M5.75 3a.75.75 0 00-.75.75v12.5c0 .414.336.75.75.75h1.5a.75.75 0 00.75-.75V3.75A.75.75 0 007.25 3h-1.5zM12.75 3a.75.75 0 00-.75.75v12.5c0 .414.336.75.75.75h1.5a.75.75 0 00.75-.75V3.75a.75.75 0 00-.75-.75h-1.5z" />
@@ -529,7 +530,7 @@ export default function ControlPage() {
                   )}
                   <button
                     onClick={() => resetTimer(timer.id)}
-                    className="px-3 py-2.5 bg-gray-700 hover:bg-gray-600 text-white text-sm font-medium rounded-lg transition-all"
+                    className="px-3 py-3 bg-gray-700 hover:bg-gray-600 active:scale-95 text-white text-sm font-medium rounded-lg transition-all touch-manipulation"
                     title="Reset"
                   >
                     <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
