@@ -39,6 +39,7 @@ export default function ControlPage() {
   const [isConnected, setIsConnected] = useState(false);
   const channelRef = useRef<RealtimeChannel | null>(null);
   const isInitializedRef = useRef(false);
+  const isLocalUpdateRef = useRef(false);
 
   // Broadcast timers to all connected clients via Supabase Realtime and save to database
   const broadcastTimers = useCallback((newTimers: Timer[], saveToDb: boolean = true) => {
@@ -82,13 +83,18 @@ export default function ControlPage() {
   useEffect(() => {
     const channel = supabase.channel(TIMER_CHANNEL, {
       config: {
-        broadcast: { self: false }, // Don't receive own broadcasts on control page
+        broadcast: { self: true },
       },
     });
 
-    // Control page doesn't need to listen to broadcasts - it's the source of truth
-    // Only subscribe to send messages
+    // Listen for broadcast updates, but ignore them during local countdown
     channel
+      .on("broadcast", { event: "timer-update" }, ({ payload }) => {
+        // Only apply remote updates if we're not in the middle of a local update
+        if (!isLocalUpdateRef.current && payload && payload.timers) {
+          setTimers(payload.timers);
+        }
+      })
       .subscribe((status) => {
         if (status === "SUBSCRIBED") {
           setIsConnected(true);
@@ -115,9 +121,13 @@ export default function ControlPage() {
   useEffect(() => {
     let tickCount = 0;
     const interval = setInterval(() => {
+      isLocalUpdateRef.current = true; // Mark as local update
       setTimers((prev) => {
         const hasRunning = prev.some((t) => t.state === "running");
-        if (!hasRunning) return prev;
+        if (!hasRunning) {
+          isLocalUpdateRef.current = false;
+          return prev;
+        }
 
         const updated = prev.map((timer) => {
           if (timer.state === "running") {
@@ -131,6 +141,7 @@ export default function ControlPage() {
         // Broadcast every second for smooth updates
         const saveToDb = tickCount % 5 === 0;
         broadcastTimers(updated, saveToDb);
+        setTimeout(() => { isLocalUpdateRef.current = false; }, 100); // Clear flag after broadcast
         return updated;
       });
     }, 1000);
