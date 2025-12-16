@@ -204,6 +204,9 @@ export default function ControlPage() {
   };
 
   const startTimer = useCallback((timerId: string) => {
+    // When starting, this device becomes the leader immediately
+    lastReceivedBroadcast.current = 0;
+    
     setTimers((prev) => {
       const updated = prev.map((t) => {
         if (t.id === timerId && t.timeRemaining > 0) {
