@@ -39,7 +39,7 @@ export default function ControlPage() {
   const [isConnected, setIsConnected] = useState(false);
   const channelRef = useRef<RealtimeChannel | null>(null);
   const isInitializedRef = useRef(false);
-  const isLocalUpdateRef = useRef(false);
+  const lastBroadcastTime = useRef(0);
 
   // Broadcast timers to all connected clients via Supabase Realtime and save to database
   const broadcastTimers = useCallback((newTimers: Timer[], saveToDb: boolean = true) => {
@@ -87,12 +87,15 @@ export default function ControlPage() {
       },
     });
 
-    // Listen for broadcast updates, but ignore them during local countdown
+    // Listen for broadcast updates
     channel
       .on("broadcast", { event: "timer-update" }, ({ payload }) => {
-        // Only apply remote updates if we're not in the middle of a local update
-        if (!isLocalUpdateRef.current && payload && payload.timers) {
-          setTimers(payload.timers);
+        if (payload && payload.timers && payload.lastUpdate) {
+          // Only apply if this is a newer update (prevents processing own broadcasts)
+          if (payload.lastUpdate > lastBroadcastTime.current) {
+            lastBroadcastTime.current = payload.lastUpdate;
+            setTimers(payload.timers);
+          }
         }
       })
       .subscribe((status) => {
@@ -121,13 +124,10 @@ export default function ControlPage() {
   useEffect(() => {
     let tickCount = 0;
     const interval = setInterval(() => {
-      isLocalUpdateRef.current = true; // Mark as local update
+      const now = Date.now();
       setTimers((prev) => {
         const hasRunning = prev.some((t) => t.state === "running");
-        if (!hasRunning) {
-          isLocalUpdateRef.current = false;
-          return prev;
-        }
+        if (!hasRunning) return prev;
 
         const updated = prev.map((timer) => {
           if (timer.state === "running") {
@@ -137,11 +137,12 @@ export default function ControlPage() {
         });
 
         tickCount++;
+        // Update the last broadcast time before broadcasting
+        lastBroadcastTime.current = now;
         // Only save to database every 5 seconds to reduce lag
         // Broadcast every second for smooth updates
         const saveToDb = tickCount % 5 === 0;
         broadcastTimers(updated, saveToDb);
-        setTimeout(() => { isLocalUpdateRef.current = false; }, 100); // Clear flag after broadcast
         return updated;
       });
     }, 1000);
