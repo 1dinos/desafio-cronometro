@@ -82,17 +82,13 @@ export default function ControlPage() {
   useEffect(() => {
     const channel = supabase.channel(TIMER_CHANNEL, {
       config: {
-        broadcast: { self: true },
+        broadcast: { self: false }, // Don't receive own broadcasts on control page
       },
     });
 
-    // Listen for broadcast updates
+    // Control page doesn't need to listen to broadcasts - it's the source of truth
+    // Only subscribe to send messages
     channel
-      .on("broadcast", { event: "timer-update" }, ({ payload }) => {
-        if (payload && payload.timers) {
-          setTimers(payload.timers);
-        }
-      })
       .subscribe((status) => {
         if (status === "SUBSCRIBED") {
           setIsConnected(true);
