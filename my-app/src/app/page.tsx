@@ -41,10 +41,12 @@ export default function ControlPage() {
   const isInitializedRef = useRef(false);
 
   // Broadcast timers to all connected clients via Supabase Realtime and save to database
-  const broadcastTimers = useCallback(async (newTimers: Timer[], saveToDb: boolean = true) => {
-    // Save to database only when explicitly requested (for state changes)
+  const broadcastTimers = useCallback((newTimers: Timer[], saveToDb: boolean = true) => {
+    // Save to database in background (non-blocking) only when explicitly requested
     if (saveToDb) {
-      await saveTimersToDatabase(newTimers);
+      saveTimersToDatabase(newTimers).catch(err => 
+        console.error('Failed to save to database:', err)
+      );
     }
     
     // Always broadcast to real-time channel (fast)
@@ -108,29 +110,8 @@ export default function ControlPage() {
 
     channelRef.current = channel;
 
-    // Also subscribe to database changes
-    const dbChannel = supabase
-      .channel('db-timers-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'timers',
-        },
-        async () => {
-          // Reload from database when changes occur
-          const dbTimers = await loadTimersFromDatabase();
-          if (dbTimers.length > 0) {
-            setTimers(dbTimers);
-          }
-        }
-      )
-      .subscribe();
-
     return () => {
       channel.unsubscribe();
-      dbChannel.unsubscribe();
     };
   }, []);
 
