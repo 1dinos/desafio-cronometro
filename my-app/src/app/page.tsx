@@ -109,12 +109,11 @@ export default function ControlPage() {
     channel
       .on("broadcast", { event: "timer-update" }, ({ payload }) => {
         if (payload && payload.timers && payload.lastUpdate) {
-          // Track when we receive broadcasts
-          lastReceivedBroadcast.current = Date.now();
-          
           // Only apply if this is from another device (different timestamp)
           const timeDiff = Math.abs(payload.lastUpdate - lastBroadcastTime.current);
           if (timeDiff > 50) { // More than 50ms difference = from another device
+            // Track when we receive broadcasts from OTHER devices
+            lastReceivedBroadcast.current = Date.now();
             setTimers(payload.timers);
           }
         }
