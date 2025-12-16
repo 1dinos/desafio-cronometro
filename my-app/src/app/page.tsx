@@ -72,11 +72,16 @@ export default function ControlPage() {
   // Load timers from database on mount
   useEffect(() => {
     const loadInitialData = async () => {
+      console.log('🔄 Loading timers from database...');
       const dbTimers = await loadTimersFromDatabase();
+      console.log('📊 Database returned:', dbTimers.length, 'timers');
+      
       // Only override default timers if database has data
       if (dbTimers.length > 0) {
+        console.log('✅ Using database timers');
         setTimers(dbTimers);
       } else {
+        console.log('⚠️ No timers in database, saving defaults');
         // Save current default timers to database
         setTimers(prev => {
           saveTimersToDatabase(prev);
