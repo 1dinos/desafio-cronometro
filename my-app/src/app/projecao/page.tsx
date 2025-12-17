@@ -60,38 +60,8 @@ export default function ProjectionPage() {
 
     channelRef.current = channel;
 
-    // Also subscribe to database changes (for reliability)
-    const dbChannel = supabase
-      .channel('db-timers-changes-projection')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'timers',
-        },
-        async () => {
-          // Reload from database when changes occur
-          const dbTimers = await loadTimersFromDatabase();
-          if (dbTimers.length > 0) {
-            setTimers(dbTimers);
-          }
-        }
-      )
-      .subscribe();
-
-    // Fallback: Listen for localStorage changes (same device)
-    const handleStorageChange = () => {
-      loadFromDatabase();
-    };
-    window.addEventListener("storage", handleStorageChange);
-    window.addEventListener("timers-updated", loadFromDatabase);
-
     return () => {
       channel.unsubscribe();
-      dbChannel.unsubscribe();
-      window.removeEventListener("storage", handleStorageChange);
-      window.removeEventListener("timers-updated", loadFromDatabase);
     };
   }, []);
 
@@ -153,7 +123,7 @@ export default function ProjectionPage() {
           {timers.map((timer, index) => (
             <div
               key={timer.id}
-              className={`relative flex flex-col items-center justify-center p-8 md:p-12 rounded-3xl transition-all duration-500 border-4 ${
+              className={`relative flex flex-col items-center justify-center p-8 md:p-12 rounded-3xl border-4 ${
                 timer.state === "running"
                   ? `bg-gradient-to-br ${getTimerColor(index)} shadow-2xl shadow-blue-500/50 border-white/30`
                   : "bg-gradient-to-br from-zinc-900 to-black shadow-2xl border-zinc-700/30"
@@ -180,7 +150,7 @@ export default function ProjectionPage() {
               {/* Progress Bar - Larger */}
               <div className="w-full h-8 bg-zinc-800 rounded-full overflow-hidden">
                 <div
-                  className={`h-full transition-all duration-1000 ${
+                  className={`h-full ${
                     getProgressPercentage(timer) > 50
                       ? "bg-gradient-to-r from-blue-500 to-blue-600"
                       : getProgressPercentage(timer) > 25
