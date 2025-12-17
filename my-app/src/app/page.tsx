@@ -439,7 +439,10 @@ export default function ControlPage() {
                     type="text"
                     value={timer.name}
                     onChange={(e) => updateTimerName(timer.id, e.target.value)}
-                    className="text-base font-semibold bg-transparent border-none focus:outline-none text-white flex-1"
+                    disabled={timer.state === "running"}
+                    className={`text-base font-semibold bg-transparent border-none focus:outline-none text-white flex-1 ${
+                      timer.state === "running" ? "opacity-60 cursor-not-allowed" : ""
+                    }`}
                   />
                   <div className="flex items-center gap-2">
                     {timer.state === "running" && (
