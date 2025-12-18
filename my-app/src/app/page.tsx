@@ -471,7 +471,7 @@ export default function ControlPage() {
                 {/* Timer Display */}
                 <div className="mb-5">
                   <div
-                    className={`text-5xl font-mono font-bold text-center mb-3 ${
+                    className={`text-5xl font-bold text-center mb-3 tracking-tight font-[var(--font-orbitron)] ${
                       timer.timeRemaining < 0
                         ? "text-red-400 animate-pulse"
                         : timer.timeRemaining <= 30 && timer.timeRemaining > 0

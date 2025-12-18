@@ -66,14 +66,18 @@ export default function ProjectionPage() {
   }, []);
 
   const formatTime = (seconds: number): string => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+    const isNegative = seconds < 0;
+    const absSeconds = Math.abs(seconds);
+    const mins = Math.floor(absSeconds / 60);
+    const secs = absSeconds % 60;
+    const timeString = `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+    return isNegative ? `-${timeString}` : timeString;
   };
 
   const getProgressPercentage = (timer: Timer): number => {
     if (timer.totalTime === 0) return 0;
-    return (timer.timeRemaining / timer.totalTime) * 100;
+    const percentage = (timer.timeRemaining / timer.totalTime) * 100;
+    return Math.max(0, Math.min(100, percentage));
   };
 
   const getTimerColor = (index: number): string => {
@@ -134,13 +138,11 @@ export default function ProjectionPage() {
 
               {/* Timer Display - Much Larger */}
               <div
-                className={`text-[10rem] md:text-[12rem] leading-none font-mono font-black mb-8 tracking-wider drop-shadow-2xl ${
-                  timer.timeRemaining < 0
+                className={`text-[10rem] md:text-[12rem] leading-none font-black mb-8 tracking-tight drop-shadow-2xl font-[var(--font-orbitron)] ${
+                  timer.timeRemaining <= 0
                     ? "text-red-500 animate-pulse drop-shadow-[0_0_40px_rgba(239,68,68,1)]"
                     : timer.timeRemaining <= 30 && timer.timeRemaining > 0
                     ? "text-red-400 animate-pulse drop-shadow-[0_0_30px_rgba(248,113,113,0.8)]"
-                    : timer.timeRemaining === 0
-                    ? "text-red-500 drop-shadow-[0_0_40px_rgba(239,68,68,1)]"
                     : "text-white drop-shadow-[0_0_20px_rgba(255,255,255,0.3)]"
                 }`}
               >
